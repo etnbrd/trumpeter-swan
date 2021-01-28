@@ -1,0 +1,11 @@
+digraph configDependents {
+  rankdir=LR;
+  node [shape=box]
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/config/args.ts" -> "checkConfigValidity"
+  "main" -> "checkConfigValidity"
+  "updateLoggerSettings" -> "enableLoggerPrettyPrinting"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/logger.ts" -> "enableLoggerPrettyPrinting"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/cli/start-worker.ts" -> "main"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/logger.ts" -> "updateLoggerSettings"
+  "checkConfigValidity" -> "updateLoggerSettings"
+}

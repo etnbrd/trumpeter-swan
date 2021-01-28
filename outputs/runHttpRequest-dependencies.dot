@@ -1,0 +1,17 @@
+digraph configDependents {
+  rankdir=LR;
+  node [shape=box]
+  "TestRunner" -> "TestRunner"
+  "runTest" -> "TestRunner"
+  "pingApi" -> "pingApi"
+  "ping" -> "pingApi"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/synthetics-http/http-request.ts" -> "runHttpRequest"
+  "runHttpTest" -> "runHttpRequest"
+  "runMultiRequest" -> "runHttpRequest"
+  "TestRunner" -> "runHttpRequest"
+  "pingApi" -> "runHttpRequest"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/synthetics-http/index.ts" -> "runHttpTest"
+  "makeAPIRequest" -> "runHttpTest"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/synthetics-multi/multi-request.ts" -> "runMultiRequest"
+  "retryStep" -> "runMultiRequest"
+}

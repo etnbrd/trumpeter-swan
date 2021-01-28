@@ -1,0 +1,18 @@
+digraph configDependents {
+  rankdir=LR;
+  node [shape=box]
+  "Worker" -> "Worker"
+  "spawnWorker" -> "Worker"
+  "main" -> "Worker"
+  "newWorkerFromQueue" -> "Worker"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/dogstatsd.ts" -> "getStatsD"
+  "isStatsDReady" -> "isStatsDReady"
+  "Worker" -> "isStatsDReady"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/cli/start-worker.ts" -> "main"
+  "main" -> "newWorkerFromQueue"
+  "getStatsD" -> "shouldUseStatsD"
+  "shouldUseStatsD" -> "shouldUseStatsD"
+  "isStatsDReady" -> "shouldUseStatsD"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/cli/start-worker.ts" -> "spawnWorker"
+  "main" -> "spawnWorker"
+}

@@ -1,0 +1,19 @@
+digraph configDependents {
+  rankdir=LR;
+  node [shape=box]
+  "Worker" -> "Worker"
+  "spawnWorker" -> "Worker"
+  "main" -> "Worker"
+  "newWorkerFromQueue" -> "Worker"
+  "doTest" -> "discardInvalidRequest"
+  "discardInvalidRequest" -> "discardInvalidRequest"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/synthetics-tests/do-test.ts" -> "doTest"
+  "newWorkerFromQueue" -> "doTest"
+  "hasFeature" -> "hasFeature"
+  "discardInvalidRequest" -> "hasFeature"
+  "Worker" -> "hasFeature"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/cli/start-worker.ts" -> "main"
+  "main" -> "newWorkerFromQueue"
+  "/Users/etienne.brodu/dd/synthetics-worker/worker/src/cli/start-worker.ts" -> "spawnWorker"
+  "main" -> "spawnWorker"
+}
