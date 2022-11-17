@@ -22,23 +22,28 @@ import {
 
 import {getImports, Import} from './imports'
 import {Dependencies, getDependencyChains, getExportedDeclarationsFromFilePath, getNodeName, getDependentDeclarationsRecursively, printNode} from './ast-utils'
-import {renderAncestors, renderTopologyMap} from './render'
 
 export interface NodeIdentifier {
   filePath: string;
   exportedName: string;
 }
 
-export default async function swan(project: Project, projectRootPath: string, sources: NodeIdentifier[], targets: NodeIdentifier[]) {
+export default async function swan(
+  project: Project,
+  projectRootPath: string,
+  sources: NodeIdentifier[],
+  targets: NodeIdentifier[]
+): Promise<{edges: {source: Node, target: Node}[], nodes: Node[]}> {
 
+  // TODO it's probably possible to use getReferencingSourceFiles from ts-morph: https://ts-morph.com/details/source-files#getting-referencing-files
   const imports = await getCachedImports(project, projectRootPath)
 
   // -------------------------------
   // EXECUTION FLOW GRAPH
   // -------------------------------
 
-  const sourceToTargets: Map<string, Set<string>> = new Map()
-  const targetToSources: Map<string, Set<string>> = new Map()
+  const sourceToTargets: Map<Node, Set<Node>> = new Map()
+  const targetToSources: Map<Node, Set<Node>> = new Map()
 
   for (const target of targets) {
     for (const source of sources) {
@@ -51,25 +56,27 @@ export default async function swan(project: Project, projectRootPath: string, so
       const dependencies = getDependentDeclarationsRecursively(targetDeclaration, project, imports, projectRootPath)
       // printDependencies(dependencies, targetDeclaration)
 
+      // console.log(dependencies)
+
       // Find all the dependency chains from the source to the target
       const dependencyChains = getDependencyChains(dependencies, sourceDeclaration, targetDeclaration)
 
       // Turn all the dependency chains into graph relations
       for (const dependencyChain of dependencyChains) {
-        let previousNodeName: string
+        let previousNode: Node
 
         for (const node of dependencyChain) {
-          const nodeName = getNodeName(node)
+          // console.log(node)
+          // const nodeName = getNodeName(node)
           // nodes.add(nodeName)
-          targetToSources.set(nodeName, targetToSources.get(nodeName) ?? new Set())
-          sourceToTargets.set(nodeName, sourceToTargets.get(nodeName) ?? new Set())
+          targetToSources.set(node, targetToSources.get(node) ?? new Set())
+          sourceToTargets.set(node, sourceToTargets.get(node) ?? new Set())
 
-          if (previousNodeName) {
-            sourceToTargets.get(previousNodeName).add(nodeName)
-            targetToSources.get(nodeName).add(previousNodeName)
-            // edges.add(`${previousNodeName} -> ${nodeName}`)
+          if (previousNode) {
+            sourceToTargets.get(previousNode).add(node)
+            targetToSources.get(node).add(previousNode)
           }
-          previousNodeName = nodeName
+          previousNode = node
         }
       }
     }
@@ -78,10 +85,7 @@ export default async function swan(project: Project, projectRootPath: string, so
   const edges = Array.from(sourceToTargets.entries()).flatMap(([source, targets]) => Array.from(targets).map(target => ({source, target})))
   const nodes = Array.from(sourceToTargets.keys())
 
-  console.log(edges)
-  console.log(nodes)
-
-  process.stdout.write(JSON.stringify(renderTopologyMap(nodes, edges)) + '\n');
+  return {edges, nodes}
 }
 
 const getCachedImports = async (project: Project, projectRootPath: string): Promise<Import[]> => {

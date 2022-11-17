@@ -17,8 +17,8 @@ import {
   Type
 } from 'ts-morph'
 
-import swan from '../src'
-import {NodeIdentifier} from '../src'
+import swan, {NodeIdentifier} from '../src'
+import {renderAncestors, renderTopologyMap} from './render'
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
@@ -55,7 +55,12 @@ async function main() {
   const sources = argv.sources.map(splitNodeIdentifier)
   const targets = argv.targets.map(splitNodeIdentifier)
 
-  await swan(project, argv.projectRoot, sources, targets)
+  const {edges, nodes} = await swan(project, argv.projectRoot, sources, targets)
+
+  console.log(edges)
+  console.log(nodes)
+
+  process.stdout.write(JSON.stringify(renderTopologyMap(nodes, edges, argv.projectRoot)) + '\n');
 }
 
 function splitNodeIdentifier(identifier): NodeIdentifier {

@@ -16,7 +16,7 @@ export interface Import {
   sourceFilePath: string
 }
 
-export const getImports = (sourceFile: SourceFile, rootPath) => {
+export const getImports = (sourceFile: SourceFile, rootPath: string) => {
   const sourceFilePath = sourceFile.getFilePath()
   const importDeclarations = sourceFile.getImportDeclarations().map(importDeclaration => {
 

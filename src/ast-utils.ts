@@ -33,7 +33,7 @@ interface Dependent {
 
 // ----
 
-export const getExportedDeclarationsFromFilePath = (project: Project, filePath: string, exportedName) => {
+export const getExportedDeclarationsFromFilePath = (project: Project, filePath: string, exportedName: string) => {
   // const sourceFiles = project.getSourceFiles(filePath)
   const sourceFile = project.getSourceFiles().find(sourceFile => sourceFile.getFilePath().endsWith(filePath))
 
@@ -80,7 +80,7 @@ export const getDependentDeclarationsRecursively = (node: Node, project: Project
 }
 
 // getDependentDeclarations returns all the declarations that depends on the given node.
-// It looks for all the references of the given node, nad find their parent declaration.
+// It looks for all the references of the given node, and find their parent declaration.
 // e.g. given the identifier of a function, it returns all the functions, files, classes... calling this identifier.
 export const getDependentDeclarations = (node: Node, project: Project, imports: readonly Import[], projectRootPath: string) => {
   const dependents: Array<Dependent> = []
@@ -183,7 +183,7 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
 
 // ----
 
-// getDependencyStack builds the dependency chains from a source to a target by recursively finding the direct dependencies from the source until it reaches the target
+// getDependencyChains builds the dependency chains from a source to a target by recursively finding the direct dependencies from the source until it reaches the target
 export const getDependencyChains = (
   dependencies: Dependencies,
   source: Node,
@@ -221,6 +221,41 @@ export const getDirectDependencies = (dependencies: Dependencies, declaration: N
 }
 
 // ----
+
+export function getNodeId(node: Node) {
+  if (
+    Node.isVariableDeclaration(node) ||
+    Node.isFunctionDeclaration(node) ||
+    Node.isClassDeclaration(node) ||
+    Node.isMethodDeclaration(node) ||
+    Node.isPropertyAssignment(node)
+  ) {
+    return `${node.getSourceFile().getFilePath()}:${node.getName()}`
+  }
+
+  if (
+    Node.isIdentifier(node) ||
+    Node.isStringLiteral(node)
+  ) {
+    return `${node.getSourceFile().getFilePath()}:${node.getText()}`
+  }
+
+  if (Node.isSourceFile(node)) {
+    return node.getFilePath()
+  }
+
+  if (Node.isImportDeclaration(node)) {
+    return getNodeName(node.getModuleSpecifier())
+  }
+
+  if (Node.isObjectLiteralExpression(node)) {
+    return getNodeName(node.getParent())
+  }
+
+  console.log('UNKNWON NODE ID', node.getKindName())
+  console.log(node)
+  throw 'unknown node id'
+}
 
 export const getNodeName = (node: Node) => {
   if (
