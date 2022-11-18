@@ -49,10 +49,8 @@ export default async function swan(
 
       // Get all the dependents, recursively, from the target declaration.
       // That is, find all the functions (classes, files, ...) that call (import, ...) the given target declaration
-      const dependencies = getDependentDeclarationsRecursively(targetDeclaration, project, imports, projectRootPath)
+      const dependencies = getDependentDeclarationsRecursively(targetDeclaration, project, projectRootPath)
       // printDependencies(dependencies, targetDeclaration)
-
-      // console.log(dependencies)
 
       // Find all the dependency chains from the source to the target
       const dependencyChains = getDependencyChains(dependencies, sourceDeclaration, targetDeclaration)
