@@ -65,7 +65,7 @@ export const getExportedDeclarations = (sourceFile: SourceFile, exportedName: st
 // getDependentDeclarationsRecursively returns a map between a declaration and all its dependents declaration, recursively, starting from the provided node
 // From a node, it finds all the dependents calling that node, then recursively call itself again with all of this dependents.
 export const getDependentDeclarationsRecursively = (node: Node, project: Project, imports: readonly Import[], projectRootPath: string, n = 22, dependencies: Dependencies = new Map()) => {
-  const dependents = dependencies.get(node) ?? getDependentDeclarations(node, project, imports, projectRootPath)
+  const dependents = dependencies.get(node) ?? getDependentDeclarations(node, projectRootPath)
   dependencies.set(node, dependents)
 
   if (n > 0) {
@@ -82,10 +82,10 @@ export const getDependentDeclarationsRecursively = (node: Node, project: Project
 // getDependentDeclarations returns all the declarations that depends on the given node.
 // It looks for all the references of the given node, and find their parent declaration.
 // e.g. given the identifier of a function, it returns all the functions, files, classes... calling this identifier.
-export const getDependentDeclarations = (node: Node, project: Project, imports: readonly Import[], projectRootPath: string) => {
+export const getDependentDeclarations = (node: Node, projectRootPath: string) => {
   const dependents: Array<Dependent> = []
 
-  const references = getReferences(node, project, imports, projectRootPath)
+  const references = getReferences(node, projectRootPath)
 
   for (const reference of references) {
     if (
@@ -113,7 +113,7 @@ export const getDependentDeclarations = (node: Node, project: Project, imports: 
 // getReferences returns the nodes that are referencing the provided node
 // - for a class or a function, it returns all the identifier node referencing it (e.g. to later call it)
 // - for a sourceFile, it returns all the importDeclaration importing it
-export const getReferences = (node: Node, project: Project, imports: readonly Import[], projectRootPath: string) => {
+export const getReferences = (node: Node, projectRootPath: string) => {
   if (
     Node.isClassDeclaration(node) ||
     Node.isFunctionDeclaration(node) ||
@@ -131,12 +131,12 @@ export const getReferences = (node: Node, project: Project, imports: readonly Im
     const {dir, name} = path.parse(path.relative(projectRootPath, node.getFilePath()))
     const relativeFilePath = path.join(dir, name)
 
-    // TODO the prepending '/' to the relativeFilePath is to match the moduleSpecifier from the imports. We should fix that in the import
-    // TODO the projectRootPath is required to match the source files from the project. We should fix that to not need using projectRootPath
-    return imports
-      .filter(importingFile => importingFile.imports.some(importedFile => importedFile.moduleSpecifier === '/' + relativeFilePath))
-      .map(importingFile => (console.log(projectRootPath + importingFile.sourceFilePath, projectRootPath, importingFile.sourceFilePath, !!project.getSourceFile(projectRootPath + importingFile.sourceFilePath)) as any) || project.getSourceFile(projectRootPath + importingFile.sourceFilePath))
-      .flatMap(sourceFile => sourceFile.getImportDeclarations().filter(importDeclaration => importDeclaration.getModuleSpecifier().getText() === '/' + relativeFilePath))
+    return node.getReferencingSourceFiles()
+      .flatMap(sourceFile => sourceFile.getImportDeclarations())
+      .filter(importDeclaration => {
+        const importPath = importDeclaration.getModuleSpecifier().getText().replace(/'/g, '')
+        return path.join(dir, importPath) === relativeFilePath
+      })
   } else {
     console.log('MISSING IN REFERENCE => ', node.getKindName(), node.getText().slice(0, 100))
     throw 'missing reference implementation for node'
