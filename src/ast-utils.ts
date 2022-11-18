@@ -260,6 +260,11 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     }
   }
 
+  // If the node is assigned in an object, then let's follow references to that object
+  if (Node.isPropertyAssignment(parent) && parent.getInitializer() === node) {
+    return parent
+  }
+
   if (
     Node.isConstructorDeclaration(parent) ||
     Node.isFunctionDeclaration(parent) ||
