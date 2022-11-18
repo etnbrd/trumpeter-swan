@@ -18,6 +18,7 @@ import {
   ts,
   Type,
   VariableDeclaration,
+  VariableDeclarationList,
 } from 'ts-morph'
 
 import {Import} from './imports'
@@ -25,7 +26,7 @@ import {Import} from './imports'
 export type Dependencies = Map<Node, Dependent[]>
 
 type DependentReference = CallExpression | Identifier | ImportDeclaration
-type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration
+type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration | PropertyAssignment
 
 interface Dependent {
   reference: DependentReference
@@ -69,6 +70,17 @@ export const getDependentDeclarationsRecursively = (node: Node, project: Project
   const dependents = dependencies.get(node) ?? getDependentDeclarations(node, projectRootPath)
   dependencies.set(node, dependents)
 
+  const printDependent = ({declaration, reference}: Dependent) => {
+    return {
+      declaration: printNode(declaration),
+      reference: printNode(reference)
+    }
+  }
+
+  for (const [node, dependents] of dependencies.entries()) {
+    // console.log(printNode(node), dependents.map(printDependent))
+  }
+
   if (n > 0) {
     for (const dependent of dependents) {
       if (!dependencies.has(dependent.declaration)) {
@@ -95,6 +107,12 @@ export const getDependentDeclarations = (node: Node, projectRootPath: string) =>
       Node.isImportDeclaration(reference)
     ) {
       const declaration = getDependentDeclaration(reference)
+      // if (!reference.getAncestors().some(Node.isCallExpression)) {
+      //   const referenceName = (reference.getSymbol()?.getFullyQualifiedName() ?? '').replace(/^".+"\./, '')
+      //   const declarationName = (declaration.getSymbol()?.getFullyQualifiedName() ?? '').replace(/^".+"\./, '')
+      //   console.log(`${declarationName} -> ${referenceName}`)
+      //   console.log(printNode(declaration), printNode(reference))
+      // }
 
       if ( // Discard the reference that is ...
         !Node.isImportDeclaration(declaration) && // the import
@@ -119,14 +137,14 @@ export const getReferences = (node: Node, projectRootPath: string) => {
     Node.isClassDeclaration(node) ||
     Node.isFunctionDeclaration(node) ||
     Node.isVariableDeclaration(node) || 
-    Node.isParameterDeclaration(node)
+    Node.isParameterDeclaration(node) ||
+    Node.isPropertyAssignment(node)
   ) {
     return node.findReferencesAsNodes()
   } else if (
     Node.isPropertyAssignment(node)
   ) {
-    console.log('SKIPPING PROPERTY ASSIGNEMENT FOR NOW')
-    throw 'missing property assignement implementation'
+    return node.findReferencesAsNodes()
   } else if (
     Node.isSourceFile(node)
   ) {
@@ -149,6 +167,23 @@ export const getReferences = (node: Node, projectRootPath: string) => {
 // e.g. given a function call, it returns the function declaration calling the given function
 export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   const parent = node.getParent()
+
+  // console.log('ancestors', printNode(node), '---', node.getAncestors().map(printNode))
+
+  if (Node.isPropertyAccessExpression(node) && !node.getAncestors().some(Node.isCallExpression)) {
+    return parent as VariableDeclaration
+  }
+
+  /*
+  target => get references
+    for each reference:
+      CallExpression or XAssignment
+      if CallExpression => take parent Function or SourceFile ==> new target
+      else XAssignment => take identifier of assignment ==> new target
+
+
+  XAssignment => PropertyAssignment, ArrayIndexAssignment, (VariableStatement->VariableDeclarationList->VariableDeclaration), ArgumentAssignment
+  */
 
   if (!parent) {
     console.log(node)
@@ -191,6 +226,7 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   if (
     Node.isFunctionDeclaration(parent) ||
     Node.isVariableDeclaration(parent) && Node.isArrowFunction(node) || // e.g. const a = () => {}
+    Node.isPropertyAssignment(parent) ||
     Node.isSourceFile(parent) ||
     Node.isClassDeclaration(parent)
   ) {
@@ -199,18 +235,19 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     Node.isImportDeclaration(parent)
   ) {
     return parent.getSourceFile()
-  } else if (
-    Node.isPropertyAssignment(parent) && Node.isArrowFunction(node)
-  ) {
-    const parentObject = parent.getParentOrThrow()
-    const declaration = parentObject.getParentOrThrow()
+  // } else if (
+  //   Node.isPropertyAssignment(parent) && Node.isArrowFunction(node)
+  // ) {
+  //   const parentObject = parent.getParentOrThrow()
+  //   const declaration = parentObject.getParentOrThrow()
+  //   console.log('isVariableDeclarationList', printNode(parentObject), printNode(declaration))
 
-    if (Node.isVariableDeclaration(declaration)) {
-      return declaration
-    } else {
-      console.log(`MISSING VARIABLE DECLARATION ${getNodeName(declaration)}, ${getNodeName(parentObject)}, ${getNodeName(parent)}`)
-      return getDependentDeclaration(parent)
-    }
+  //   if (Node.isVariableDeclaration(declaration)) {
+  //     return declaration
+  //   } else {
+  //     console.log(`MISSING VARIABLE DECLARATION ${getNodeName(declaration)}, ${getNodeName(parentObject)}, ${getNodeName(parent)}`)
+  //     return getDependentDeclaration(parent)
+  //   }
   } else {
     return getDependentDeclaration(parent)
   }
@@ -303,6 +340,10 @@ export const getNodeName = (node: Node) => {
   ) {
     return node.getName()
   }
+  
+  if (/(Token|Keyword)$/.test(node.getKindName())) {
+    return ''
+  }
 
   if (
     Node.isIdentifier(node) ||
@@ -328,10 +369,7 @@ export const getNodeName = (node: Node) => {
     return getNodeName(node.getExpression())
   }
 
-  console.log('UNKNWON NODE NAME', node.getKindName())
-  console.log(node.getText())
-  console.log(node)
-  throw 'unknown node name'
+  return 'n/a'
 }
 
 export const printNode = (node: Node) => {

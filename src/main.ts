@@ -57,8 +57,8 @@ async function main() {
 
   const {edges, nodes} = await swan(project, argv.projectRoot, sources, targets)
 
-  console.log(edges)
-  console.log(nodes)
+  // console.log(edges)
+  // console.log(nodes)
 
   process.stdout.write(JSON.stringify(renderTopologyMap(nodes, edges, argv.projectRoot)) + '\n');
 }
