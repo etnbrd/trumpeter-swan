@@ -3,30 +3,46 @@ import {
   ArrowFunction,
   CallExpression,
   ClassDeclaration,
+  ConstructorDeclaration,
   ExportedDeclarations,
   FunctionDeclaration,
   FunctionExpression,
   Identifier,
   ImportDeclaration,
+  MethodDeclaration,
   Node,
+  ObjectLiteralExpression,
+  ParameterDeclaration,
   Project,
   PropertyAccessExpression,
   PropertyAssignment,
-  ParameterDeclaration,
+  PropertyDeclaration,
   ReferenceEntry,
   SourceFile,
   ts,
   Type,
-  VariableDeclaration,
-  VariableDeclarationList,
+  VariableDeclaration
 } from 'ts-morph'
 
 import {Import} from './imports'
 
 export type Dependencies = Map<Node, Dependent[]>
 
-type DependentReference = CallExpression | Identifier | ImportDeclaration
-type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration | PropertyAssignment
+type DependentReference =
+  | CallExpression
+  | Identifier
+  | ImportDeclaration
+
+type DependentDeclaration =
+  | ClassDeclaration
+  | FunctionDeclaration
+  | MethodDeclaration
+  | ParameterDeclaration
+  | PropertyAssignment
+  | PropertyDeclaration
+  | SourceFile
+  | VariableDeclaration
+  | ConstructorDeclaration
 
 interface Dependent {
   reference: DependentReference
@@ -98,7 +114,11 @@ export const getDependentDeclarationsRecursively = (node: Node, project: Project
 export const getDependentDeclarations = (node: Node, projectRootPath: string) => {
   const dependents: Array<Dependent> = []
 
+  console.log(`FINDING REFERENCES FOR ${printNode(node)}`)
   const references = getReferences(node, projectRootPath)
+  for (const ref of references) {
+    console.log(`  -> REFERENCE ${printNode(ref)}`)
+  }
 
   for (const reference of references) {
     if (
@@ -106,15 +126,27 @@ export const getDependentDeclarations = (node: Node, projectRootPath: string) =>
       Node.isIdentifier(reference) ||
       Node.isImportDeclaration(reference)
     ) {
-      const declaration = getDependentDeclaration(reference)
 
       if ( // Discard the reference that is ...
-        !Node.isImportDeclaration(declaration) && // the import
-        !isVariableDeclarationName(reference) && // the variable declaration
-        !isFunctionDeclarationName(reference) // the function declaration
+        isVariableDeclarationName(reference) || // the variable declaration
+        isFunctionDeclarationName(reference) || // the function declaration
+        isMethodDeclarationName(reference) || // the method declaration
+        isPropertyAssignmentReference(reference) || // the property assignement declaration
+        isPropertyDeclarationName(reference) // the property declaration
+      ) {
+        continue
+      }
+
+      console.log(`FOLLOWING REFERENCE ${printNode(reference)}`)
+      const declaration = getDependentDeclaration(reference)
+      console.log(`  -> DECLARATION ${printNode(declaration)}`)
+
+      if ( // Discard the reference that is the import declaration of the reference
+        !Node.isImportDeclaration(declaration) // 
       ) {
         dependents.push({declaration, reference})
       }
+
     } else {
       console.log('MISSING IN PARENTS FROM DECLARATION => ', reference.getKindName())
     }
@@ -128,13 +160,21 @@ export const getDependentDeclarations = (node: Node, projectRootPath: string) =>
 // - for a sourceFile, it returns all the importDeclaration importing it
 export const getReferences = (node: Node, projectRootPath: string) => {
   if (
-    Node.isClassDeclaration(node) ||
+    // Node.isClassDeclaration(node) ||
     Node.isFunctionDeclaration(node) ||
-    Node.isVariableDeclaration(node) || 
+    Node.isMethodDeclaration(node) ||
     Node.isParameterDeclaration(node) ||
-    Node.isPropertyAssignment(node)
+    Node.isPropertyAssignment(node) ||
+    Node.isPropertyDeclaration(node) ||
+    Node.isVariableDeclaration(node)
   ) {
     return node.findReferencesAsNodes()
+  } else if (
+    Node.isConstructorDeclaration(node)
+  ) {
+    const classDeclaration = node.getParent()
+    return classDeclaration.findReferencesAsNodes()
+      .filter(reference => Node.isNewExpression(reference.getParent())) // Keep only the references instantiating the class
   } else if (
     Node.isSourceFile(node)
   ) {
@@ -173,10 +213,27 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     // TODO this condition body could be refactored into a function
     const caller = parent.getExpression()
 
+    // TODO for simplicity, we consider only the implementation and not the overrides declaration of functions
     const [declaration, ...rest] = caller.getSymbol().getDeclarations()
+    // .filter(declaration => Node.isFunctionDeclaration(declaration) && declaration.isImplementation())
+
+    // Here we cheat. We know it's the queue definition from the async module, so we return it and handle it later in the references as a regular FunctionDeclaration
+    if (declaration.getSourceFile().getFilePath().includes("node_modules/@types/async/index.d.ts")) {
+      if (Node.isFunctionDeclaration(declaration) && declaration.getName() === "queue") {
+        return declaration
+      }
+    }
+
     if (rest.length > 0) {
-      console.log('DECLARATIONS', [declaration, ...rest])
+      console.log('PANIC: SEVERAL DECLARATIONS ')
+      for (const decl of [declaration, ...rest]) {
+        console.log(printNode(decl), Node.isFunctionDeclaration(decl), Node.isFunctionDeclaration(decl) && decl.isImplementation())
+      }
       throw 'several implementation for caller in call expression'
+    }
+
+    if (!declaration) {
+      return
     }
 
     if (Node.isVariableDeclaration(declaration)) {
@@ -194,18 +251,24 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     ) {
       throw 'todo, not implemented yet'
     } else {
-      console.log(`[${declaration.getText()} - ${declaration.getKindName()}]`)
+      console.log(`DECLARATION [${declaration.getText()} - ${declaration.getKindName()}]`)
+      console.log(`CALLER [${caller.getText()} - ${caller.getKindName()}]`)
+      console.log(`NODE [${node.getText()} - ${node.getKindName()}]`)
+      console.log(`PARENT [${parent.getText()} - ${parent.getKindName()}]`)
       console.log(declaration)
       throw 'not a function declaration'
     }
   }
 
   if (
+    Node.isConstructorDeclaration(parent) ||
     Node.isFunctionDeclaration(parent) ||
     Node.isVariableDeclaration(parent) && Node.isArrowFunction(node) || // e.g. const a = () => {}
-    Node.isPropertyAssignment(parent) ||
+    Node.isPropertyDeclaration(parent) && Node.isArrowFunction(node) || // e.g. private a = () => {}
+    Node.isPropertyAssignment(parent) || // If the node is assigned in an object, then let's follow references to that object
     Node.isSourceFile(parent) ||
-    Node.isClassDeclaration(parent)
+    Node.isClassDeclaration(parent) ||
+    Node.isMethodDeclaration(parent)
   ) {
     return parent
   } else if (
@@ -213,6 +276,7 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   ) {
     return parent.getSourceFile()
   } else {
+    console.log(`  ... RECURSING ${printNode(parent)}`)
     return getDependentDeclaration(parent)
   }
 }
@@ -264,7 +328,8 @@ export function getNodeId(node: Node) {
     Node.isFunctionDeclaration(node) ||
     Node.isClassDeclaration(node) ||
     Node.isMethodDeclaration(node) ||
-    Node.isPropertyAssignment(node)
+    Node.isPropertyAssignment(node) ||
+    Node.isImportSpecifier(node)
   ) {
     return `${node.getSourceFile().getFilePath()}:${node.getName()}`
   }
@@ -289,6 +354,14 @@ export function getNodeId(node: Node) {
     return getNodeName(node.getParent())
   }
 
+  if (Node.isConstructorDeclaration(node)) {
+    return `${node.getSourceFile().getFilePath()}:${node.getParent().getName()}`
+  }
+
+  if (Node.isPropertyDeclaration(node)) {
+    return `${node.getSourceFile().getFilePath()}:${node.getParent().getName()}.${node.getName()}`
+  }
+
   console.log('UNKNWON NODE ID', node.getKindName())
   console.log(node)
   throw 'unknown node id'
@@ -300,7 +373,8 @@ export const getNodeName = (node: Node) => {
     Node.isFunctionDeclaration(node) ||
     Node.isClassDeclaration(node) ||
     Node.isMethodDeclaration(node) ||
-    Node.isPropertyAssignment(node)
+    Node.isPropertyAssignment(node) ||
+    Node.isImportSpecifier(node)
   ) {
     return node.getName()
   }
@@ -333,6 +407,22 @@ export const getNodeName = (node: Node) => {
     return getNodeName(node.getExpression())
   }
 
+  if (Node.isConstructorDeclaration(node)) {
+    return `${node.getParent().getName()}`
+  }
+
+  if (Node.isPropertyDeclaration(node)) {
+    return `${node.getParent().getName()}.${node.getName()}`
+  }
+
+  // TODO check this is correct
+  if (
+    Node.isNamedImports(node) ||
+    Node.isImportClause(node)
+  ) {
+    return node.getText()
+  }
+
   return 'n/a'
 }
 
@@ -349,4 +439,19 @@ const isVariableDeclarationName = (node: Node) => {
 const isFunctionDeclarationName = (node: Node) => {
   const parent = node.getParent()
   return Node.isFunctionDeclaration(parent) && parent.getNameNode() === node
+}
+
+const isMethodDeclarationName = (node: Node) => {
+  const parent = node.getParent()
+  return Node.isMethodDeclaration(parent) && parent.getNameNode() === node
+}
+
+const isPropertyAssignmentReference = (node: Node) => {
+  const parent = node.getParent()
+  return Node.isPropertyAssignment(parent) && parent.getNameNode() === node
+}
+
+const isPropertyDeclarationName = (node: Node) => {
+  const parent = node.getParent()
+  return Node.isPropertyDeclaration(parent) && parent.getNameNode() === node
 }
