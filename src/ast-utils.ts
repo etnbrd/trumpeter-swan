@@ -12,6 +12,7 @@ import {
   Project,
   PropertyAccessExpression,
   PropertyAssignment,
+  ParameterDeclaration,
   ReferenceEntry,
   SourceFile,
   ts,
@@ -24,7 +25,7 @@ import {Import} from './imports'
 export type Dependencies = Map<Node, Dependent[]>
 
 type DependentReference = CallExpression | Identifier | ImportDeclaration
-type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration
+type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration
 
 interface Dependent {
   reference: DependentReference
@@ -117,7 +118,8 @@ export const getReferences = (node: Node, projectRootPath: string) => {
   if (
     Node.isClassDeclaration(node) ||
     Node.isFunctionDeclaration(node) ||
-    Node.isVariableDeclaration(node)
+    Node.isVariableDeclaration(node) || 
+    Node.isParameterDeclaration(node)
   ) {
     return node.findReferencesAsNodes()
   } else if (
@@ -153,9 +155,42 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     throw 'orphaned node'
   }
 
+  // If the node is an argument in the call expression, then let's follow that to the parameter declaration, which will
+  // eventually bubble up again in this call expression with node being the caller expression
+  if (Node.isCallExpression(parent) && parent.getArguments().includes(node)) {
+    // TODO this condition body could be refactored into a function
+    const caller = parent.getExpression()
+
+    const [declaration, ...rest] = caller.getSymbol().getDeclarations()
+    if (rest.length > 0) {
+      console.log('DECLARATIONS', [declaration, ...rest])
+      throw 'several implementation for caller in call expression'
+    }
+
+    if (Node.isVariableDeclaration(declaration)) {
+      const initializer = declaration.getInitializer()
+      if (Node.isFunctionExpression(initializer) || Node.isArrowFunction(initializer)) {
+        // For simplicity, we just use the index of the argument to get the index of the parameter.
+        // We don't handle spread operator yet, which will be really confusing.
+        const parameters = initializer.getParameters()
+        const callArguments = parent.getArguments()
+        const parameterDeclaration = parameters[callArguments.findIndex(arg => arg == node)]
+        return parameterDeclaration
+      }
+    } else if (
+      Node.isFunctionDeclaration(declaration)
+    ) {
+      throw 'todo, not implemented yet'
+    } else {
+      console.log(`[${declaration.getText()} - ${declaration.getKindName()}]`)
+      console.log(declaration)
+      throw 'not a function declaration'
+    }
+  }
+
   if (
     Node.isFunctionDeclaration(parent) ||
-    Node.isVariableDeclaration(parent) && Node.isArrowFunction(node) ||
+    Node.isVariableDeclaration(parent) && Node.isArrowFunction(node) || // e.g. const a = () => {}
     Node.isSourceFile(parent) ||
     Node.isClassDeclaration(parent)
   ) {
@@ -235,7 +270,8 @@ export function getNodeId(node: Node) {
 
   if (
     Node.isIdentifier(node) ||
-    Node.isStringLiteral(node)
+    Node.isStringLiteral(node) ||
+    Node.isParameterDeclaration(node)
   ) {
     return `${node.getSourceFile().getFilePath()}:${node.getText()}`
   }
@@ -270,7 +306,8 @@ export const getNodeName = (node: Node) => {
 
   if (
     Node.isIdentifier(node) ||
-    Node.isStringLiteral(node)
+    Node.isStringLiteral(node) ||
+    Node.isParameterDeclaration(node)
   ) {
     return node.getText()
   }
@@ -287,13 +324,19 @@ export const getNodeName = (node: Node) => {
     return getNodeName(node.getParent())
   }
 
+  if (Node.isCallExpression(node)) {
+    return getNodeName(node.getExpression())
+  }
+
   console.log('UNKNWON NODE NAME', node.getKindName())
+  console.log(node.getText())
   console.log(node)
   throw 'unknown node name'
 }
 
 export const printNode = (node: Node) => {
-  return `[${getNodeName(node)}: ${node.getKindName()}]`
+  const {line, column} = node.getSourceFile().getLineAndColumnAtPos(node.getStart())
+  return `[${getNodeName(node)}: ${node.getKindName()}, ${node.getSourceFile().getFilePath()}:${line}:${column}]`
 }
 
 const isVariableDeclarationName = (node: Node) => {
