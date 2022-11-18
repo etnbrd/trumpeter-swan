@@ -64,14 +64,14 @@ export const getExportedDeclarations = (sourceFile: SourceFile, exportedName: st
 
 // getDependentDeclarationsRecursively returns a map between a declaration and all its dependents declaration, recursively, starting from the provided node
 // From a node, it finds all the dependents calling that node, then recursively call itself again with all of this dependents.
-export const getDependentDeclarationsRecursively = (node: Node, project: Project, imports: readonly Import[], projectRootPath: string, n = 22, dependencies: Dependencies = new Map()) => {
+export const getDependentDeclarationsRecursively = (node: Node, project: Project, projectRootPath: string, n = 22, dependencies: Dependencies = new Map()) => {
   const dependents = dependencies.get(node) ?? getDependentDeclarations(node, projectRootPath)
   dependencies.set(node, dependents)
 
   if (n > 0) {
     for (const dependent of dependents) {
       if (!dependencies.has(dependent.declaration)) {
-        getDependentDeclarationsRecursively(dependent.declaration, project, imports, projectRootPath, n - 1, dependencies)
+        getDependentDeclarationsRecursively(dependent.declaration, project, projectRootPath, n - 1, dependencies)
       }
     }
   }

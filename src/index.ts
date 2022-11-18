@@ -34,10 +34,6 @@ export default async function swan(
   sources: NodeIdentifier[],
   targets: NodeIdentifier[]
 ): Promise<{edges: {source: Node, target: Node}[], nodes: Node[]}> {
-
-  // TODO it's probably possible to use getReferencingSourceFiles from ts-morph: https://ts-morph.com/details/source-files#getting-referencing-files
-  const imports = await getCachedImports(project, projectRootPath)
-
   // -------------------------------
   // EXECUTION FLOW GRAPH
   // -------------------------------
@@ -87,35 +83,6 @@ export default async function swan(
 
   return {edges, nodes}
 }
-
-const getCachedImports = async (project: Project, projectRootPath: string): Promise<Import[]> => {
-  const cacheFilePath = './cached-imports.json'
-
-  try {
-    const imports = await fs.promises.readFile(cacheFilePath)
-    console.log('used cached imports')
-    return JSON.parse(imports.toString())
-  } catch (error) {
-    console.log('generating imports')
-    const imports = project.getSourceFiles()
-      .filter(sourceFile => sourceFile.getFilePath() && !sourceFile.getFilePath().endsWith('.d.ts'))
-      .map(sourceFile => getImports(sourceFile, projectRootPath))
-
-    const serializedImports = serializeImports(imports)
-    const sortedImports = serializedImports.sort((a, b) => a.sourceFilePath > b.sourceFilePath ? 1 : -1)
-    console.log('caching imports')
-    void fs.promises.writeFile(cacheFilePath, JSON.stringify(serializedImports))
-    return serializedImports
-  }
-}
-
-const serializeImports = (imports) => imports.map(({imports, sourceFilePath}) => ({
-  imports: imports.map(({imports, moduleSpecifier}) => ({
-    moduleSpecifier,
-    imports: imports.map(({name}) => name)
-  })),
-  sourceFilePath
-}))
 
 function printDependencies(dependencies: Dependencies, targetDeclaration: Node) {
   console.log('TARGET:')
