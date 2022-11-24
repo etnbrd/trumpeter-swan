@@ -18,7 +18,7 @@ import {
 } from 'ts-morph'
 
 import swan, {NodeIdentifier} from '../src'
-import {renderAncestors, renderTopologyMap} from './render'
+import {renderers} from './render'
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
@@ -46,6 +46,12 @@ async function main() {
       demandOption: true,
       description: 'The target AST nodes until which to generate the execution graph. Must be a relative path and an exported identifier, separated by a colon. e.g. server.ts:serve'
     })
+    .option('output', {
+      alias: 'o',
+      choices: Object.keys(renderers),
+      demandOption: true,
+      description: 'The format in which to output the generated graph'
+    })
     .parse()
 
   const project = new Project({
@@ -54,10 +60,11 @@ async function main() {
 
   const sources = argv.sources.map(splitNodeIdentifier)
   const targets = argv.targets.map(splitNodeIdentifier)
+  const render = renderers[argv.output]
 
   const {edges, nodes} = await swan(project, argv.projectRoot, sources, targets)
 
-  process.stdout.write(JSON.stringify(renderTopologyMap(nodes, edges, argv.projectRoot)) + '\n');
+  process.stdout.write(render(nodes, edges, argv.projectRoot) + '\n');
 }
 
 function splitNodeIdentifier(identifier): NodeIdentifier {

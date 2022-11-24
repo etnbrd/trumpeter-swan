@@ -6,13 +6,13 @@ import {Node} from 'ts-morph'
 
 import {Dependencies, getNodeId, getNodeName} from './ast-utils'
 
-export const renderPlainList = (entries: Map<string, Set<string>>) =>
+const renderPlainList = (entries: Map<string, Set<string>>) =>
   Array.from(entries.entries()).sort().map(
     ([key, set]) =>
     `${key}\n${Array.from(set).sort().map(entry => `  - ${entry}`).join('\n')}`
   ).join('\n')
 
-export const renderMarkdownTable = (entries: Map<string, Set<string>>, header: [string, string]) =>
+const renderMarkdownTable = (entries: Map<string, Set<string>>, header: [string, string]) =>
   [
     `| ${header[0]} | ${header[1]} |`,
     `| ------------ | ------------ |`,
@@ -22,19 +22,56 @@ export const renderMarkdownTable = (entries: Map<string, Set<string>>, header: [
     )
   ].join('\n')
 
-export const renderGraphviz = (entries: Map<string, Set<string>>) =>
-  [
+const renderGraphviz = (nodes: Node[], edges: Array<{source: Node, target: Node}>, projectRootPath: string) => {
+  // TODO use regex to avoid too many loops
+  const escapedNodeId = (node) => getNodeId(node)
+    .replaceAll('/','_')
+    .replaceAll('.','_')
+    .replaceAll('-','_')
+    .replaceAll('@','_')
+    .replaceAll(':','_')
+    .replaceAll(' ','_')
+    .replaceAll('(','_')
+    .replaceAll(')','_')
+    .replaceAll('=','_')
+    .replaceAll('>','_')
+
+  const escapedNodeName = (node) => getNodeName(node).replaceAll('>', '')
+
+  const clusters: {[key: string]: Node[]} = {}
+  for (const node of nodes) {
+    const filePath = node.getSourceFile().getFilePath().replace(projectRootPath, '')
+      .replaceAll('/','_')
+      .replaceAll('.','_')
+      .replaceAll('-','_')
+      .replaceAll('@','_')
+      .replaceAll(':','_')
+      .replaceAll(' ','_')
+      .replaceAll('(','_')
+      .replaceAll(')','_')
+      .replaceAll('=','_')
+      .replaceAll('>','_')
+
+    clusters[filePath] ??= []
+    clusters[filePath].push(node)
+  }
+
+  return [
     'digraph configDependents {',
     '  rankdir=LR;',
     '  node [shape=box]',
-    ...Array.from(entries.entries()).sort().flatMap(
-      ([key, set]) =>
-        Array.from(set.values()).map((target) => `  "${target}" -> "${key}"`)
-    ),
+    ...Object.entries(clusters).map(([cluster, nodes]) => [
+      `  subgraph cluster_${cluster} {`,
+      `    label=${cluster}`,
+       ...nodes.map(node => `    ${escapedNodeId(node)} [label="${escapedNodeName(node)}"]`),
+       `  }`
+    ].join('\n')),
+    ...edges.map(({source, target}) => `  ${escapedNodeId(source)} -> ${escapedNodeId(target)}`),
     '}'
   ].join('\n')
+}
 
-export const renderAncestors = (ancestors: Dependencies) => {
+const renderAncestors = (ancestors: Dependencies) => {
   const flat = new Map<string, Set<string>>()
 
   for (const [ancestor, ancestorParents] of ancestors) {
@@ -54,8 +91,8 @@ export const renderAncestors = (ancestors: Dependencies) => {
   return flat
 }
 
-export const renderTopologyMap = (nodes: Node[], edges: Array<{source: Node, target: Node}>, projectRootPath: string) => {
-  return {
+const renderTopologyMap = (nodes: Node[], edges: Array<{source: Node, target: Node}>, projectRootPath: string) => {
+  return JSON.stringify({
     layoutType: "railway",
     layoutMargin: {
       top: 3,
@@ -99,5 +136,12 @@ export const renderTopologyMap = (nodes: Node[], edges: Array<{source: Node, tar
       target: getNodeId(target),
       // description: 'Increased latency on SETEX',
     }))
-  }
+  })
+}
+
+export const renderers: {[key: string]: (nodes: Node[], edges: Array<{source: Node, target: Node}>, projectRootPath: string) => string} = {
+  'topologyMap': renderTopologyMap,
+  'graphviz': renderGraphviz,
+  // 'plainList': renderPlainList,
+  // 'markdownTable': renderMarkdownTable,
 }
