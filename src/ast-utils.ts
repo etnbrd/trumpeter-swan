@@ -107,12 +107,6 @@ export const getDependentDeclarations = (node: Node, projectRootPath: string) =>
       Node.isImportDeclaration(reference)
     ) {
       const declaration = getDependentDeclaration(reference)
-      // if (!reference.getAncestors().some(Node.isCallExpression)) {
-      //   const referenceName = (reference.getSymbol()?.getFullyQualifiedName() ?? '').replace(/^".+"\./, '')
-      //   const declarationName = (declaration.getSymbol()?.getFullyQualifiedName() ?? '').replace(/^".+"\./, '')
-      //   console.log(`${declarationName} -> ${referenceName}`)
-      //   console.log(printNode(declaration), printNode(reference))
-      // }
 
       if ( // Discard the reference that is ...
         !Node.isImportDeclaration(declaration) && // the import
@@ -142,10 +136,6 @@ export const getReferences = (node: Node, projectRootPath: string) => {
   ) {
     return node.findReferencesAsNodes()
   } else if (
-    Node.isPropertyAssignment(node)
-  ) {
-    return node.findReferencesAsNodes()
-  } else if (
     Node.isSourceFile(node)
   ) {
     const {dir, name} = path.parse(path.relative(projectRootPath, node.getFilePath()))
@@ -168,22 +158,9 @@ export const getReferences = (node: Node, projectRootPath: string) => {
 export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   const parent = node.getParent()
 
-  // console.log('ancestors', printNode(node), '---', node.getAncestors().map(printNode))
-
   if (Node.isPropertyAccessExpression(node) && !node.getAncestors().some(Node.isCallExpression)) {
     return parent as VariableDeclaration
   }
-
-  /*
-  target => get references
-    for each reference:
-      CallExpression or XAssignment
-      if CallExpression => take parent Function or SourceFile ==> new target
-      else XAssignment => take identifier of assignment ==> new target
-
-
-  XAssignment => PropertyAssignment, ArrayIndexAssignment, (VariableStatement->VariableDeclarationList->VariableDeclaration), ArgumentAssignment
-  */
 
   if (!parent) {
     console.log(node)
@@ -235,19 +212,6 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     Node.isImportDeclaration(parent)
   ) {
     return parent.getSourceFile()
-  // } else if (
-  //   Node.isPropertyAssignment(parent) && Node.isArrowFunction(node)
-  // ) {
-  //   const parentObject = parent.getParentOrThrow()
-  //   const declaration = parentObject.getParentOrThrow()
-  //   console.log('isVariableDeclarationList', printNode(parentObject), printNode(declaration))
-
-  //   if (Node.isVariableDeclaration(declaration)) {
-  //     return declaration
-  //   } else {
-  //     console.log(`MISSING VARIABLE DECLARATION ${getNodeName(declaration)}, ${getNodeName(parentObject)}, ${getNodeName(parent)}`)
-  //     return getDependentDeclaration(parent)
-  //   }
   } else {
     return getDependentDeclaration(parent)
   }
@@ -342,7 +306,7 @@ export const getNodeName = (node: Node) => {
   }
   
   if (/(Token|Keyword)$/.test(node.getKindName())) {
-    return ''
+    return 'keyword'
   }
 
   if (
