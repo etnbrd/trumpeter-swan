@@ -249,7 +249,38 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     } else if (
       Node.isFunctionDeclaration(declaration)
     ) {
-      throw 'todo, not implemented yet'
+      // TODO refactor this with the condition above
+      // For simplicity, we just use the index of the argument to get the index of the parameter.
+      // We don't handle spread operator yet, which will be really confusing.
+      const parameters = declaration.getParameters()
+      const callArguments = parent.getArguments()
+      const parameterDeclaration = parameters[callArguments.findIndex(arg => arg == node)]
+      return parameterDeclaration
+    } else if (
+      Node.isImportSpecifier(declaration)
+    ) {
+      // TODO refactor this to recursively get back to the function declaration and grab the parameter definition from the argument
+      // it's the same thing as the two condition above, with the functionDeclaration retrieved from getDependentDeclaration
+      const functionDeclaration = getDependentDeclaration(declaration)
+      if (Node.isVariableDeclaration(functionDeclaration)) {
+        const initializer = functionDeclaration.getInitializer()
+        if (Node.isFunctionExpression(initializer) || Node.isArrowFunction(initializer)) {
+          // For simplicity, we just use the index of the argument to get the index of the parameter.
+          // We don't handle spread operator yet, which will be really confusing.
+          const parameters = initializer.getParameters()
+          const callArguments = parent.getArguments()
+          const parameterDeclaration = parameters[callArguments.findIndex(arg => arg == node)]
+          return parameterDeclaration
+        }
+      } else if (
+        Node.isFunctionDeclaration(functionDeclaration)
+      ) {
+        const parameters = functionDeclaration.getParameters()
+        const callArguments = parent.getArguments()
+        const parameterDeclaration = parameters[callArguments.findIndex(arg => arg == node)]
+
+        return parameterDeclaration
+      }
     } else {
       console.log(`DECLARATION [${declaration.getText()} - ${declaration.getKindName()}]`)
       console.log(`CALLER [${caller.getText()} - ${caller.getKindName()}]`)
@@ -258,6 +289,11 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
       console.log(declaration)
       throw 'not a function declaration'
     }
+  }
+
+  // If the node is assigned in an object, then let's follow references to that object
+  if (Node.isPropertyAssignment(parent) && parent.getInitializer() === node) {
+    return parent
   }
 
   if (
