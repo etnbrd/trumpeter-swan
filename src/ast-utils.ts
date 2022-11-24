@@ -18,6 +18,7 @@ import {
   ts,
   Type,
   VariableDeclaration,
+  VariableDeclarationList,
 } from 'ts-morph'
 
 import {Import} from './imports'
@@ -25,7 +26,7 @@ import {Import} from './imports'
 export type Dependencies = Map<Node, Dependent[]>
 
 type DependentReference = CallExpression | Identifier | ImportDeclaration
-type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration
+type DependentDeclaration = FunctionDeclaration | SourceFile | VariableDeclaration | ClassDeclaration | ParameterDeclaration | PropertyAssignment
 
 interface Dependent {
   reference: DependentReference
@@ -68,6 +69,17 @@ export const getExportedDeclarations = (sourceFile: SourceFile, exportedName: st
 export const getDependentDeclarationsRecursively = (node: Node, project: Project, projectRootPath: string, n = 22, dependencies: Dependencies = new Map()) => {
   const dependents = dependencies.get(node) ?? getDependentDeclarations(node, projectRootPath)
   dependencies.set(node, dependents)
+
+  const printDependent = ({declaration, reference}: Dependent) => {
+    return {
+      declaration: printNode(declaration),
+      reference: printNode(reference)
+    }
+  }
+
+  for (const [node, dependents] of dependencies.entries()) {
+    // console.log(printNode(node), dependents.map(printDependent))
+  }
 
   if (n > 0) {
     for (const dependent of dependents) {
@@ -119,14 +131,10 @@ export const getReferences = (node: Node, projectRootPath: string) => {
     Node.isClassDeclaration(node) ||
     Node.isFunctionDeclaration(node) ||
     Node.isVariableDeclaration(node) || 
-    Node.isParameterDeclaration(node)
-  ) {
-    return node.findReferencesAsNodes()
-  } else if (
+    Node.isParameterDeclaration(node) ||
     Node.isPropertyAssignment(node)
   ) {
-    console.log('SKIPPING PROPERTY ASSIGNEMENT FOR NOW')
-    throw 'missing property assignement implementation'
+    return node.findReferencesAsNodes()
   } else if (
     Node.isSourceFile(node)
   ) {
@@ -149,6 +157,10 @@ export const getReferences = (node: Node, projectRootPath: string) => {
 // e.g. given a function call, it returns the function declaration calling the given function
 export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   const parent = node.getParent()
+
+  if (Node.isPropertyAccessExpression(node) && !node.getAncestors().some(Node.isCallExpression)) {
+    return parent as VariableDeclaration
+  }
 
   if (!parent) {
     console.log(node)
@@ -191,6 +203,7 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
   if (
     Node.isFunctionDeclaration(parent) ||
     Node.isVariableDeclaration(parent) && Node.isArrowFunction(node) || // e.g. const a = () => {}
+    Node.isPropertyAssignment(parent) ||
     Node.isSourceFile(parent) ||
     Node.isClassDeclaration(parent)
   ) {
@@ -199,18 +212,6 @@ export const getDependentDeclaration = (node: Node): DependentDeclaration => {
     Node.isImportDeclaration(parent)
   ) {
     return parent.getSourceFile()
-  } else if (
-    Node.isPropertyAssignment(parent) && Node.isArrowFunction(node)
-  ) {
-    const parentObject = parent.getParentOrThrow()
-    const declaration = parentObject.getParentOrThrow()
-
-    if (Node.isVariableDeclaration(declaration)) {
-      return declaration
-    } else {
-      console.log(`MISSING VARIABLE DECLARATION ${getNodeName(declaration)}, ${getNodeName(parentObject)}, ${getNodeName(parent)}`)
-      return getDependentDeclaration(parent)
-    }
   } else {
     return getDependentDeclaration(parent)
   }
@@ -303,6 +304,10 @@ export const getNodeName = (node: Node) => {
   ) {
     return node.getName()
   }
+  
+  if (/(Token|Keyword)$/.test(node.getKindName())) {
+    return 'keyword'
+  }
 
   if (
     Node.isIdentifier(node) ||
@@ -328,10 +333,7 @@ export const getNodeName = (node: Node) => {
     return getNodeName(node.getExpression())
   }
 
-  console.log('UNKNWON NODE NAME', node.getKindName())
-  console.log(node.getText())
-  console.log(node)
-  throw 'unknown node name'
+  return 'n/a'
 }
 
 export const printNode = (node: Node) => {
